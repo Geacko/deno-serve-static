@@ -1,6 +1,6 @@
 {
     "name": "@geacko/deno-serve-static",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "exports": "./mod.ts",
     "imports": { 
         "@geacko/mimes": "jsr:@geacko/mimes@^1.0.0" 
