@@ -67,6 +67,7 @@ type Part = {
     count : number
 }
 
+/** @see https://www.rfc-editor.org/rfc/rfc9110#name-comparison-2 */
 function matchEtag(
     reqHeader: string, etag: string, acceptWeakness = !1
 ) {
@@ -89,8 +90,14 @@ function matchEtag(
 
         x = x.trim()
 
-        if (x.startsWith(`W/`) && acceptWeakness) {
-            x = x.substring(2)
+        if (x.startsWith(`W/`)) {
+
+            if (acceptWeakness) {
+                x = x.substring(2)
+            } else {
+                continue
+            }
+            
         }
 
         if (x == etag) {
@@ -103,10 +110,7 @@ function matchEtag(
 
 }
 
-/**
- *  @internal
- *  @see https://www.rfc-editor.org/rfc/rfc9110#name-precedence-of-preconditions
- */
+/** @see https://www.rfc-editor.org/rfc/rfc9110#name-precedence-of-preconditions */
 function evaluatePreconds(
     req: Request, preconds: ReturnType<typeof computePrecondHeaders>
 ) : Status.OK 
@@ -262,6 +266,7 @@ function createContentTypeFromPathname(
 
 }
 
+/** @see https://www.rfc-editor.org/rfc/rfc9110#name-range-specifiers */
 function computeRangeHeader(
     headerValue: string, maxSizeBytes: number
 ) : Part[] {
@@ -276,6 +281,7 @@ function computeRangeHeader(
 
     for (const r of headerValue.substring(6).split(`,`)) {
 
+        // Note : do not support `other-range`
         if (!/^\s*\d*\-\d*\s*$/.test(r)) {
             return []
         }
@@ -343,6 +349,7 @@ function createSlicedStream(
 
 const EOL_ENCODED = new Uint8Array([0x0D, 0x0A]);
 
+/** @see https://www.rfc-editor.org/rfc/rfc9110#name-media-type-multipart-bytera */
 function createMultipartBytesStream(
     cursor: Deno.Seeker, size: number, contentType: string, parts: Part[], boundary: string
 ) : TransformStream<Uint8Array, Uint8Array> {
