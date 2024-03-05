@@ -509,7 +509,7 @@ export const serveStatic = ({
 
         if (stat.isFile != true) {
 
-            return new Response(``, {
+            return new Response(void 0, {
                 status: Status.NOT_FOUND, headers
             })
 
@@ -522,9 +522,9 @@ export const serveStatic = ({
 
             for (
                 const i of [
-                HeaderName.ETAG,
-                HeaderName.VARY,
-                HeaderName.LAST_MODIFIED,
+                    HeaderName.ETAG,
+                    HeaderName.VARY,
+                    HeaderName.LAST_MODIFIED,
                 ] as const
             ) {
 
