@@ -1,5 +1,7 @@
 export type { 
-    ServeStaticOptions 
+    ServeStaticOptions,
+    ServeStaticFactory,
+    ServeStaticHandler,
 } from "./src/serve.ts"
 
 export { 
