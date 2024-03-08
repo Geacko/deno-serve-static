@@ -23,7 +23,7 @@ export type ServeStaticFactory = (
 
 const enum Status {
 
-    OK 					  = 200,
+    OK 				      = 200,
     NO_CONTENT 			  = 204,
     PARTIAL_CONTENT 	  = 206,
     NOT_MODIFIED 		  = 304,
@@ -152,8 +152,8 @@ function evaluatePreconds(
             return Status.PRECONDITION_FAILED
         }
 
-    } 
-    
+    }
+
     // Check `If-Unmodified-Since` condition
     else if ((s = headers.get(HeaderName.IF_UNMODIFIED_SINCE))) {
 
@@ -171,8 +171,8 @@ function evaluatePreconds(
             return Status.NOT_MODIFIED
         }
 
-    } 
-    
+    }
+
     // Check `If-Modified-Since` condition
     else if ((s = headers.get(HeaderName.IF_MODIFIED_SINCE))) {
 
@@ -199,8 +199,8 @@ function evaluatePreconds(
                 return Status.OK
             }
 
-        } 
-        
+        }
+
         // Otherwise -> Etag (Weakness not allowed here...)
         else if (!s.startsWith(`W/`) && e != s) {
             return Status.OK
@@ -263,8 +263,8 @@ function createContentTypeFromPathname(
     const mime = Mime.lookup(pathname.match(/\.([A-Z0-9]+)$/i)?.[1] ?? ``)
 
     if (mime) {
-        return mime.isUtf8 
-             ? mime.type + ` charset=UTF-8` 
+        return mime.isUtf8
+             ? mime.type + ` charset=UTF-8`
              : mime.type
     }
 
@@ -553,7 +553,7 @@ export const serveStatic: ServeStaticFactory = ({ rewrite = x => x } = {}) => as
         ) {
 
             headers.set(i, preconds[i])
-        
+
         }
 
     }
@@ -610,7 +610,7 @@ export const serveStatic: ServeStaticFactory = ({ rewrite = x => x } = {}) => as
     // Note : `computeds` MUST be a non empty Array
     if (computeds.length == 0) {
 
-        headers.set(HeaderName.CONTENT_RANGE, 
+        headers.set(HeaderName.CONTENT_RANGE,
             `${AcceptRangeUnit.BYTES} */${size}`
         )
 
@@ -631,7 +631,7 @@ export const serveStatic: ServeStaticFactory = ({ rewrite = x => x } = {}) => as
 
         const boundary = createBoundary()
 
-        headers.set(HeaderName.CONTENT_TYPE, 
+        headers.set(HeaderName.CONTENT_TYPE,
             `multipart/byteranges boundary=${boundary}`
         )
 
@@ -674,5 +674,5 @@ export const serveStatic: ServeStaticFactory = ({ rewrite = x => x } = {}) => as
         file.readable.pipeThrough(pipe),
         init,
     )
-    
+
 }
