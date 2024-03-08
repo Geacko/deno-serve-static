@@ -23,13 +23,13 @@ export type ServeStaticFactory = (
 
 const enum Status {
 
-    OK 				      = 200,
-    NO_CONTENT 			  = 204,
-    PARTIAL_CONTENT 	  = 206,
-    NOT_MODIFIED 		  = 304,
-    BAD_REQUEST 		  = 400,
-    NOT_FOUND 			  = 404,
-    METHOD_NOT_ALLOWED	  = 405,
+    OK                    = 200,
+    NO_CONTENT            = 204,
+    PARTIAL_CONTENT       = 206,
+    NOT_MODIFIED          = 304,
+    BAD_REQUEST           = 400,
+    NOT_FOUND             = 404,
+    METHOD_NOT_ALLOWED    = 405,
     PRECONDITION_FAILED   = 412,
     RANGE_NOT_SATISFIABLE = 416,
 
@@ -45,20 +45,20 @@ const enum Allowed {
 
 const enum HeaderName {
 
-    ALLOW 				= `Allow`,
-    VARY 				= `Vary`,
-    CONTENT_TYPE 		= `Content-Type`,
-    CONTENT_LENGTH 		= `Content-Length`,
-    CONTENT_RANGE 		= `Content-Range`,
-    ACCEPT_RANGES 		= `Accept-Ranges`,
-    LAST_MODIFIED 		= `Last-Modified`,
-    RANGE 				= `Range`,
-    ETAG 				= `ETag`,
-    IF_MODIFIED_SINCE 	= `If-Modified-Since`,
+    ALLOW               = `Allow`,
+    VARY                = `Vary`,
+    CONTENT_TYPE        = `Content-Type`,
+    CONTENT_LENGTH      = `Content-Length`,
+    CONTENT_RANGE       = `Content-Range`,
+    ACCEPT_RANGES       = `Accept-Ranges`,
+    LAST_MODIFIED       = `Last-Modified`,
+    RANGE               = `Range`,
+    ETAG                = `ETag`,
+    IF_MODIFIED_SINCE   = `If-Modified-Since`,
     IF_UNMODIFIED_SINCE = `If-Unmodified-Since`,
-    IF_MATCH 			= `If-Match`,
-    IF_NONE_MATCH 		= `If-None-Match`,
-    IF_RANGE 			= `If-Range`,
+    IF_MATCH            = `If-Match`,
+    IF_NONE_MATCH       = `If-None-Match`,
+    IF_RANGE            = `If-Range`,
 
 }
 
@@ -222,7 +222,7 @@ function createEtag(
 
 type PrecondHeaders = {
     [HeaderName.LAST_MODIFIED] : string
-    [HeaderName.ETAG]		   : string
+    [HeaderName.ETAG]          : string
     [HeaderName.VARY]          : string
 }
 
@@ -363,7 +363,7 @@ function createMultipartBytesStream(
     const enc = new TextEncoder()
 
     let start = 0
-    let end = 0
+    let end   = 0
     let count = 0
 
     let head = `--${boundary}\r\n`
@@ -392,7 +392,7 @@ function createMultipartBytesStream(
         }
 
         start = r.start
-        end = r.end
+        end   = r.end
         count = r.count
 
         // Start entity body
