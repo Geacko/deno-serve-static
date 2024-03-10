@@ -5,10 +5,16 @@ HTTP endpoint to serve static files on Deno Platform
 ## Basic Usage
 
 ```ts
-import { serveStatic } from "jsr@geacko/deno-serve-static";
+import { serveStatic } from "jsr:@geacko/deno-serve-static";
+import { lookup } from "jsr:@geacko/mimes";
 
 Deno.serve(serveStatic({
-  rewrite: (pathname) => "/assets" + pathname,
+  generateFilename(req){ 
+    return "assets" + new URL(req.url).pathname 
+  },
+  generateContentType({pathname}){ 
+    return lookup(pathname)?.contentType ?? ``
+  }
 }));
 ```
 
@@ -20,7 +26,7 @@ Deno.serve(serveStatic({
   - `GET`
 - Range requests (`Range` and `Content-Range` headers)
 - Multipart range requests (`multipart/byteranges`)
-- Support for weak entity tags (`ETag` prefixed with `W/`)
+- Support for weak entity tags (`ETag`)
 - Conditional requests
   - `If-Match`
   - `If-None-Match`
@@ -36,28 +42,3 @@ Deno.serve(serveStatic({
 - No Directory Indexing
 
 We let you handle these cases...
-
-## More Complexe example
-
-```ts
-import { create } from "jsr:@geacko/pipe";
-import { serveStatic } from "jsr:@geacko/deno-serve-static";
-
-const useCacheControl = async (
-  req: Request,
-  next: (req: Request) => Response | Promise<Response>,
-) => {
-  const out = await next(req);
-  if (out.status == 200) {
-    out.headers.set(`Cache-Control`, `public, max-age=${60 * 60 * 24}`);
-  }
-  return out;
-};
-
-Deno.serve(create(
-  serveStatic({
-    rewrite: (pathname) => "/assets" + pathname,
-  }),
-  useCacheControl,
-));
-```
