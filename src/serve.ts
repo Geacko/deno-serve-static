@@ -1,25 +1,54 @@
-import * as Mime from "@geacko/mimes"
+/** 
+ *  Wip ...
+ * */
+export type ServeStaticFileInfos = {
 
+    pathname : string
+    size     : number
+    mtime    : Date | null
+    atime    : Date | null
+
+}
+
+/** 
+ *  Wip ...
+ * */
 export type ServeStaticOptions = Partial<{
 
-    /**
-     *  Rewrite the pathname of the
-     *  request URI. The output pathname
-     *  MUST start with "/".
-     */
-    rewrite: (pathnme: string, req: Request) => string
+    /** 
+     *  Wip ...
+     * */
+    generateFilename: (
+        req: Request
+    ) => string
+
+    /** 
+     *  Wip ...
+     * */
+    generateETag: (
+        desc: ServeStaticFileInfos, req: Request
+    ) => string | Promise<string>
+
+    /** 
+     *  Wip ...
+     * */
+    generateContentType: (
+        desc: ServeStaticFileInfos, req: Request
+    ) => string
 
 }>
 
-/** Wip */
-export type ServeStaticHandler = (
-    req: Request
-) => Response | Promise<Response>
+/** 
+ *  Wip ...
+ * */
+export type ServeStaticHandler 
+    = (req: Request) => Promise<Response>
 
-/** Wip */
-export type ServeStaticFactory = (
-    options: ServeStaticOptions
-) => ServeStaticHandler
+/** 
+ *  Wip ...
+ * */
+export type ServeStaticFactory 
+    = (options?: ServeStaticOptions) => ServeStaticHandler
 
 const enum Status {
 
@@ -35,7 +64,7 @@ const enum Status {
 
 }
 
-const enum Allowed {
+const enum Method {
 
     GET     = `GET`,
     OPTIONS = `OPTIONS`,
@@ -69,6 +98,8 @@ const enum AcceptRangeUnit {
 
 }
 
+type Nullable<T> = T | null | undefined
+
 type Part = {
     start : number
     end   : number
@@ -78,7 +109,7 @@ type Part = {
 /** @see https://www.rfc-editor.org/rfc/rfc9110#name-comparison-2 */
 function matchEtag(
     reqHeader: string, etag: string, acceptWeakness = !1
-) {
+) : boolean {
 
     if (etag.startsWith(`W/`)) {
 
@@ -99,11 +130,13 @@ function matchEtag(
         x = x.trim()
 
         if (x.startsWith(`W/`)) {
+
             if (acceptWeakness) {
                 x = x.substring(2)
             } else {
                 continue
             }
+
         }
 
         if (x == etag) {
@@ -116,159 +149,109 @@ function matchEtag(
 
 }
 
+function testPreconditionFailed(
+    headers : Headers, e : Nullable<string>, t : Nullable<number>
+) : boolean {
+
+    let s
+
+    if (e && (s = headers.get(HeaderName.IF_MATCH))) {
+        return !matchEtag(s, e)
+    }
+    
+    // Note : if `s` is invalid -> `t <> Date.parse(s)` always return false
+    if (t && (s = headers.get(HeaderName.IF_UNMODIFIED_SINCE))) {
+        return t > Date.parse(s)
+    }
+
+    return !1
+
+}
+
+function testNotModified(
+    headers: Headers, e : Nullable<string>, t : Nullable<number>
+) : boolean {
+
+    let s
+
+    if (e && (s = headers.get(HeaderName.IF_NONE_MATCH))) {
+        return matchEtag(s, e, true)
+    }
+    
+    // Note : if `s` is invalid -> `t <> Date.parse(s)` always return false
+    if (t && (s = headers.get(HeaderName.IF_MODIFIED_SINCE))) {
+        return t <= Date.parse(s)
+    }
+
+    return !1
+
+}
+
+function testConditionalRange(
+    headers: Headers, e : Nullable<string>, t : Nullable<number>
+) : boolean {
+
+    if (!headers.has(HeaderName.RANGE)) {
+        return !1
+    }
+
+    const s = headers.get(HeaderName.IF_RANGE)
+
+    if (!s) {
+        return !0
+    }
+
+    // We assume it is a Date
+    if (s.endsWith(` GMT`)) {
+        return t ? t <= Date.parse(s) : !0
+    }
+
+    // otherwise -> it is an etag
+    return e ? 
+        !( s.startsWith(`W/`) 
+        || e.startsWith(`W/`) 
+        || e != s ) : !0
+
+}
+
 /** @see https://www.rfc-editor.org/rfc/rfc9110#name-precedence-of-preconditions */
 function evaluatePreconds(
-    req: Request, preconds: PrecondHeaders | undefined
+    req: Request, etag : Nullable<string>, date : Nullable<Date>
 ) : | Status.OK
     | Status.PARTIAL_CONTENT
     | Status.NOT_MODIFIED
     | Status.PRECONDITION_FAILED {
 
-    const isRanged = req.headers.has(HeaderName.RANGE)
-
-    if (!preconds) {
-        return isRanged ? Status.PARTIAL_CONTENT : Status.OK
-    }
-
     const {
-        headers,
+        headers
     } = req
 
-    const {
-        [HeaderName.ETAG]: e,
-        [HeaderName.LAST_MODIFIED]: d,
-    } = preconds
+    if (!etag && !date) {
 
-    const t = Date.parse(d)
-
-    // header content
-    let s
-
-    // Check `If-Match` condition
-    if ((s = headers.get(HeaderName.IF_MATCH))) {
-
-        // Note : if `e` is Weak -> always return false
-        if (!matchEtag(s, e)) {
-            return Status.PRECONDITION_FAILED
-        }
-
+        return headers.has(HeaderName.RANGE) 
+             ? Status.PARTIAL_CONTENT 
+             : Status.OK
+             
     }
 
-    // Check `If-Unmodified-Since` condition
-    else if ((s = headers.get(HeaderName.IF_UNMODIFIED_SINCE))) {
+    const time 
+        = date 
+        ? date.getTime() - date.getMilliseconds()
+        : 0
 
-        // Note : if `s` is invalid -> `t > Date.parse(s)` always return false
-        if (t > Date.parse(s)) {
-            return Status.PRECONDITION_FAILED
-        }
-
+    if (testPreconditionFailed(headers, etag, time)) {
+        return Status.PRECONDITION_FAILED
     }
 
-    // Check `If-None-Match` condition
-    if ((s = headers.get(HeaderName.IF_NONE_MATCH))) {
-
-        if (matchEtag(s, e, true)) {
-            return Status.NOT_MODIFIED
-        }
-
+    if (testNotModified(headers, etag, time)) {
+        return Status.NOT_MODIFIED
     }
 
-    // Check `If-Modified-Since` condition
-    else if ((s = headers.get(HeaderName.IF_MODIFIED_SINCE))) {
-
-        // Note : if `s` is invalid -> `t <= Date.parse(s)` always return false
-        if (t <= Date.parse(s)) {
-            return Status.NOT_MODIFIED
-        }
-
+    if (req.method == Method.GET && testConditionalRange(headers, etag, time)) {
+        return Status.PARTIAL_CONTENT
     }
 
-    // Note : If is `HEAD` -> we ignore the `Range` header
-    if (req.method == Allowed.HEAD || !isRanged) {
-        return Status.OK
-    }
-
-    // Check `If-Range` condition
-    if ((s = headers.get(HeaderName.IF_RANGE))) {
-
-        // We assume is a Date
-        if (s.endsWith(` GMT`)) {
-
-            // Note : if `s` is invalid -> `t > Date.parse(s)` always return false
-            if (t > Date.parse(s)) {
-                return Status.OK
-            }
-
-        }
-
-        // Otherwise -> Etag (Weakness not allowed here...)
-        else if (!s.startsWith(`W/`) && e != s) {
-            return Status.OK
-        }
-
-    }
-
-    return Status.PARTIAL_CONTENT
-
-}
-
-function createEtag(
-    ...xs: number[]
-) {
-
-    return `W/"${xs.map((x) => x.toString(36)).join(`.`)}"`
-
-}
-
-type PrecondHeaders = {
-    [HeaderName.LAST_MODIFIED] : string
-    [HeaderName.ETAG]          : string
-    [HeaderName.VARY]          : string
-}
-
-function computePrecondHeaders(
-    stat: Deno.FileInfo
-) : PrecondHeaders | undefined {
-
-    const {
-        mtime: time,
-    } = stat
-
-    // ensure `mtime` is a valid Date
-    if (!time || !isFinite(time.getTime())) {
-        return void 0
-    }
-
-    const {
-        size,
-    } = stat
-
-    const date = time.toUTCString()
-
-    // Note : We re-parse `date` for consistency
-    const etag = createEtag(size, Date.parse(date))
-
-    return {
-        [HeaderName.LAST_MODIFIED]: date,
-        [HeaderName.ETAG]: etag,
-        [HeaderName.VARY]: HeaderName.ETAG,
-    }
-
-}
-
-function createContentTypeFromPathname(
-    pathname: string
-) : string {
-
-    const mime = Mime.lookup(pathname.match(/\.([A-Z0-9]+)$/i)?.[1] ?? ``)
-
-    if (mime) {
-        return mime.isUtf8
-             ? mime.type + ` charset=UTF-8`
-             : mime.type
-    }
-
-    return ``
+    return Status.OK
 
 }
 
@@ -357,7 +340,7 @@ const EOL_ENCODED = new Uint8Array([0x0D, 0x0A])
 
 /** @see https://www.rfc-editor.org/rfc/rfc9110#name-media-type-multipart-bytera */
 function createMultipartBytesStream(
-    cursor: Deno.Seeker, size: number, contentType: string, parts: Part[], boundary: string
+    cursor: Deno.Seeker, size: number, contentType: Nullable<string>, parts: Part[], boundary: string
 ) : TransformStream<Uint8Array, Uint8Array> {
 
     const enc = new TextEncoder()
@@ -436,9 +419,7 @@ function createMultipartBytesStream(
 
     }
 
-    return new TransformStream({
-        start: next, transform,
-    })
+    return new TransformStream({ start: next, transform })
 
 }
 
@@ -462,217 +443,221 @@ function createBoundary(
 
 }
 
+function generateLocalFilename(
+    req: Request
+) : string {
+
+    return new URL(req.url).pathname.substring(1)
+
+}
+
+function generateTrivialETag({
+    mtime , size
+}: ServeStaticFileInfos) {
+
+    return mtime ? `W/"${mtime.getTime().toString(36)}:${size.toString(36)}"` : ``
+
+}
+
 const commonHeaders = [
-    [HeaderName.ALLOW, `${Allowed.GET}, ${Allowed.OPTIONS}, ${Allowed.HEAD}`],
+    [HeaderName.ALLOW, `${Method.GET}, ${Method.OPTIONS}, ${Method.HEAD}`],
     [HeaderName.ACCEPT_RANGES, `${AcceptRangeUnit.BYTES}`],
 ]
 
 /** Wip */
-export const serveStatic: ServeStaticFactory = ({ rewrite = x => x } = {}) => async req => {
+export const serveStatic: ServeStaticFactory = ({
+    generateFilename = generateLocalFilename, generateETag = generateTrivialETag, generateContentType
+} = {}) => {
 
-    const headers = new Headers(commonHeaders)
-    const {
-        method,
-    } = req
+    return async req => {
 
-    // If `OPTIONS` -> only send basic headers
-    if (method == Allowed.OPTIONS) {
+        const headers = new Headers(commonHeaders)
+        const {
+            method,
+        } = req
+    
+        // If `OPTIONS` -> only send basic headers
+        if (method == Method.OPTIONS) {
 
-        return new Response(void 0, {
-            status: Status.NO_CONTENT, headers,
-        })
-
-    }
-
-    if (
-        method != Allowed.GET &&
-        method != Allowed.HEAD
-    ) {
-
-        return new Response(void 0, {
-            status: Status.METHOD_NOT_ALLOWED, headers,
-        })
-
-    }
-
-    let pathname
-
-    // Prevent bad formated URL
-    try {
-        pathname = `.` + rewrite(new URL(req.url).pathname, req)
-    } catch {
-
-        return new Response(void 0, {
-            status: Status.BAD_REQUEST, headers,
-        })
-
-    }
-
-    let stat
-
-    try {
-        stat = await Deno.stat(pathname)
-    } catch (e) {
-
-        // if `NotFound` or `NotADirectory` like -> 404
+            return new Response(void 0, {
+                status: Status.NO_CONTENT, headers,
+            })
+    
+        }
+    
         if (
-            e instanceof Deno.errors.NotFound ||
-            e instanceof Deno.errors.NotADirectory ||
-            e instanceof Error && e.message.startsWith(`Not a directory`)
+            method != Method.GET &&
+            method != Method.HEAD
         ) {
+
+            return new Response(void 0, {
+                status: Status.METHOD_NOT_ALLOWED, headers,
+            })
+    
+        }
+    
+        // Prevent bad formated URL
+        if (!req.url || !URL.canParse(req.url)) {
+
+            return new Response(void 0, {
+                status: Status.BAD_REQUEST, headers,
+            })
+
+        }
+
+        const pathname 
+            = generateFilename(req)
+
+        let stat ; try {
+            stat = await Deno.stat(pathname)
+        } catch {
 
             return new Response(void 0, {
                 status: Status.NOT_FOUND, headers,
             })
 
         }
-
-        throw e
-
-    }
-
-    if (stat.isFile != true) {
-
-        return new Response(void 0, {
-            status: Status.NOT_FOUND, headers,
-        })
-
-    }
-
-    // Note : Support only weak Etag
-    const preconds = computePrecondHeaders(stat)
-
-    if (preconds) {
-
-        for (
-            const i of [
-                HeaderName.ETAG,
-                HeaderName.VARY,
-                HeaderName.LAST_MODIFIED,
-            ] as const
-        ) {
-
-            headers.set(i, preconds[i])
-
+        
+        if (stat.isDirectory) {
+        
+            return new Response(void 0, {
+                status: Status.NOT_FOUND, headers,
+            })
+    
         }
 
-    }
+        const {
+            size, mtime, atime
+        } = stat
+        
+        const etag = await generateETag({
+            pathname, size, mtime, atime
+        } , req)
 
-    const status = evaluatePreconds(req, preconds)
+        if (etag) {
+            headers.set(HeaderName.ETAG, etag)
+            headers.set(HeaderName.VARY, HeaderName.ETAG)
+        }
 
-    if (
-        status != Status.OK &&
-        status != Status.PARTIAL_CONTENT
-    ) {
+        if (mtime) {
+            headers.set(HeaderName.LAST_MODIFIED, mtime.toUTCString())
+        }
 
-        // Note : MUST be `null` or `undefined`
-        return new Response(void 0, {
-            status, headers,
-        })
+        const status = evaluatePreconds(req, etag, mtime)
+    
+        if (
+            status != Status.OK &&
+            status != Status.PARTIAL_CONTENT
+        ) {
+    
+            // Note : MUST be `null` or `undefined`
+            return new Response(void 0, {
+                status, headers,
+            })
+    
+        }
 
-    }
+        const contentType = generateContentType?.({
+            pathname, size, mtime, atime
+        } , req)
+    
+        // if `HEAD` or empty body -> send headers only & ignore the `Range` header
+        if (method == Method.HEAD || size <= 0) {
+    
+            contentType &&
+            headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
+            headers.set(HeaderName.CONTENT_LENGTH, `${size}`)
 
-    const contentType = createContentTypeFromPathname(pathname)
-    const {
-        size,
-    } = stat
+            return new Response(void 0, {
+                status: Status.OK, headers,
+            })
+    
+        }
+    
+        if (status == Status.OK) {
+    
+            contentType &&
+            headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
+            headers.set(HeaderName.CONTENT_LENGTH, `${size}`)
 
-    // if `HEAD` or empty body -> send headers only & ignore the `Range` header
-    if (method == Allowed.HEAD || size <= 0) {
-
-        contentType &&
-        headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
-        headers.set(HeaderName.CONTENT_LENGTH, `${size}`)
-
-        return new Response(void 0, {
-            status: Status.OK, headers,
-        })
-
-    }
-
-    if (status == Status.OK) {
-
-        contentType &&
-        headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
-        headers.set(HeaderName.CONTENT_LENGTH, `${size}`)
-
-        // send streamed 200 response
-        return new Response((await Deno.open(pathname)).readable, {
-            status, headers,
-        })
-
-    }
-
-    const computeds = computeRangeHeader(
-        req.headers.get(HeaderName.RANGE)!, size,
-    )
-
-    // Note : `computeds` MUST be a non empty Array
-    if (computeds.length == 0) {
-
-        headers.set(HeaderName.CONTENT_RANGE,
-            `${AcceptRangeUnit.BYTES} */${size}`
+            // send streamed 200 response
+            return new Response((await Deno.open(pathname)).readable, {
+                status, headers
+            })
+    
+        }
+    
+        const computeds = computeRangeHeader(
+            req.headers.get(HeaderName.RANGE)!, size,
         )
-
-        if (preconds) {
+    
+        // Note : `computeds` MUST be a non empty Array
+        if (computeds.length == 0) {
+    
+            headers.set(HeaderName.CONTENT_RANGE,
+                `${AcceptRangeUnit.BYTES} */${size}`
+            )
+    
+            headers.delete(HeaderName.LAST_MODIFIED)
             headers.delete(HeaderName.VARY)
             headers.delete(HeaderName.ETAG)
-            headers.delete(HeaderName.LAST_MODIFIED)
+    
+            return new Response(void 0, {
+                status: Status.RANGE_NOT_SATISFIABLE, headers,
+            })
+    
+        }
+    
+        // more than 1 range -> multipart/byteranges
+        if (computeds.length > 1) {
+
+            const boundary = createBoundary()
+            const file     = await Deno.open(pathname)
+            const init     = {
+                status, headers
+            }
+    
+            headers.set(HeaderName.CONTENT_TYPE,
+                `multipart/byteranges boundary=${boundary}`
+            )
+
+            // Note : No need to precompute the `Content-Length`
+            return new Response(
+                file.readable.pipeThrough(
+                    createMultipartBytesStream(
+                        file, 
+                        size, 
+                        contentType, 
+                        computeds, 
+                        boundary
+                    )
+                ), 
+                init
+            )
+    
         }
 
-        return new Response(void 0, {
-            status: Status.RANGE_NOT_SATISFIABLE, headers,
-        })
-
-    }
-
-    // more than 1 range -> multipart/byteranges
-    if (computeds.length > 1) {
-
-        const boundary = createBoundary()
-
-        headers.set(HeaderName.CONTENT_TYPE,
-            `multipart/byteranges boundary=${boundary}`
-        )
-
+        const {
+            start, end, count
+        } = computeds[0]!
+    
+        contentType &&
+        headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
+        headers.set(HeaderName.CONTENT_LENGTH, `${count}`)
+        headers.set(HeaderName.CONTENT_RANGE, `${AcceptRangeUnit.BYTES} ${start}-${end}/${size}`)
+    
         const file = await Deno.open(pathname)
         const init = {
-            status, headers,
+            status, headers
         }
 
-        const pipe = createMultipartBytesStream(
-            file, size, contentType, computeds, boundary
-        )
-
-        // Note : No need to precompute the `Content-Length`
         return new Response(
-            file.readable.pipeThrough(pipe),
-            init,
+            file.readable.pipeThrough(
+                createSlicedStream(file, start, count)
+            ), 
+            init
         )
-
-    }
-
-    const {
-        start, end, count
-    } = computeds[0]!
-
-    contentType &&
-    headers.set(HeaderName.CONTENT_TYPE, `${contentType}`)
-    headers.set(HeaderName.CONTENT_LENGTH, `${count}`)
-    headers.set(HeaderName.CONTENT_RANGE, `${AcceptRangeUnit.BYTES} ${start}-${end}/${size}`)
-
-    const file = await Deno.open(pathname)
-    const init = {
-        status, headers,
-    }
-
-    const pipe = createSlicedStream(
-        file, start, count
-    )
-
-    return new Response(
-        file.readable.pipeThrough(pipe),
-        init,
-    )
+    
+    } 
 
 }
